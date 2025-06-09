@@ -42,3 +42,4 @@ next-env.d.ts
 
 *.wav
 *.mp4
+/lib/generated/prisma

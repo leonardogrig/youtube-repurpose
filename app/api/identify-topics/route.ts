@@ -1,60 +1,54 @@
 import { SpeechSegment } from "@/components/types";
 import { NextRequest, NextResponse } from "next/server";
 
-// Schema for topic identification response
-const TopicIdentificationSchema = {
+// Schema for Twitter post generation with segments
+const TwitterPostWithSegmentsSchema = {
   type: "object",
   properties: {
-    topic_suggestions: {
+    twitter_posts: {
       type: "array",
       description:
-        "A list of suggested topics with their corresponding segment ranges.",
+        "A list of Twitter thread posts with their corresponding segment ranges.",
       items: {
         type: "object",
         properties: {
           title: {
             type: "string",
-            description: "A catchy title for this topic/section",
+            description: "A catchy title for this Twitter thread",
           },
-          description: {
+          post_content: {
             type: "string",
-            description: "A brief description of what this section covers",
+            description:
+              "The complete Twitter thread content formatted with line breaks as a single string",
           },
           start_segment: {
             type: "number",
             description:
-              "The index of the first segment in this topic (0-based)",
+              "The index of the first segment in this post (0-based)",
           },
           end_segment: {
             type: "number",
-            description:
-              "The index of the last segment in this topic (0-based)",
+            description: "The index of the last segment in this post (0-based)",
           },
           key_points: {
             type: "array",
-            description: "Main key points covered in this topic",
+            description: "Main key points covered in this Twitter thread",
             items: {
               type: "string",
             },
           },
-          social_media_appeal: {
-            type: "string",
-            description:
-              "Why this section would work well for social media (Twitter/X)",
-          },
         },
         required: [
           "title",
-          "description",
+          "post_content",
           "start_segment",
           "end_segment",
           "key_points",
-          "social_media_appeal",
         ],
       },
     },
   },
-  required: ["topic_suggestions"],
+  required: ["twitter_posts"],
 };
 
 // Add API route configuration
@@ -81,7 +75,7 @@ async function callOpenRouterWithModel(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
         "HTTP-Referer": "https://localhost:3000",
-        "X-Title": "Video Editor - Topic Identification",
+        "X-Title": "Video Editor - Twitter Post Generation",
       },
       body: JSON.stringify({
         model: model,
@@ -91,7 +85,7 @@ async function callOpenRouterWithModel(
         ],
         response_format: {
           type: "json_object",
-          schema: TopicIdentificationSchema,
+          schema: TwitterPostWithSegmentsSchema,
         },
       }),
     }
@@ -135,42 +129,73 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build a detailed prompt for topic identification
+    // Build a detailed prompt for Twitter thread generation
     const prompt = `
+      You are a viral Twitter/X content expert who creates highly engaging Twitter threads that drive massive engagement.
+      
       You are given a JSON transcription of a video as an array of segments.
       Each segment has 'start' (seconds), 'end' (seconds), and 'text' (transcribed speech).
 
-      Your task is to analyze the entire transcription and identify 3-5 main topics/sections that would work well as standalone social media content (especially Twitter/X posts with video clips).
+      Your task is to analyze the entire transcription and create 3-5 compelling Twitter threads that would go viral. Each thread should:
+      
+      1. Cover a coherent section of the video (specify start_segment and end_segment indices)
+      2. Be formatted as a complete Twitter thread as a SINGLE STRING with line breaks
+      3. Follow this EXACT style and structure:
+      
+      EXAMPLE FORMAT:
+      
+      Google's CEO just had the most important AI interview of 2025.
+      
+      He revealed mind-blowing facts about artificial general intelligence that 99% of people wouldn't know...
+      
+      Including when the singularity actually happens.
+      
+      Here are my top 8 takeaways:
+      (No. 6 will terrify you)
+      
+      OR
+      
+      1. Token Explosion
+      
+      Google's Gemini: 9.7 trillion → 480 trillion tokens per month.
+      
+      That's 50x growth in 12 months.
+      
+      Each token = someone getting an "aha moment" from AI.
 
-      For each topic suggestion:
-      1. Identify a coherent section that covers a complete thought or concept
-      2. The section should be engaging and self-contained
-      3. It should be suitable for social media (interesting, valuable, or entertaining)
-      4. Specify which segments (by index) should be included
-      5. The segment range can span multiple consecutive segments (e.g., segments 5-12)
-
-      Guidelines:
-      - Look for complete ideas, stories, tips, or key insights
-      - Avoid fragments or incomplete thoughts
-      - Prioritize content that has social media appeal (educational, entertaining, or thought-provoking)
-      - Each suggestion should typically be 30 seconds to 2 minutes long
-      - Segments should be consecutive (start_segment to end_segment)
-
-      Example output format:
+      REQUIREMENTS:
+      - Start with a hook that creates curiosity and urgency
+      - Use short, punchy sentences
+      - Include specific numbers, statistics, or facts when available
+      - Create intrigue with phrases like "99% of people don't know this" or "This will shock you"
+      - Use line breaks strategically for readability
+      - Make numbered points when listing takeaways
+      - Each thread should be 3-10 tweets long
+      - Focus on the most valuable, surprising, or controversial insights
+      - Make people want to watch the video to learn more
+      
+      Guidelines for segment selection:
+      - Each suggestion should cover consecutive segments (start_segment to end_segment)
+      - Segments should contain complete thoughts or concepts
+      - Prioritize content with high viral potential (shocking facts, valuable insights, controversial takes)
+      - Each thread should typically represent 30 seconds to 3 minutes of video content
+      
+      CRITICAL: You MUST return the response in this EXACT JSON format:
+      
       {
-        "topic_suggestions": [
+        "twitter_posts": [
           {
-            "title": "The Main Problem with Current Approaches",
-            "description": "Explains why traditional methods fail and introduces a better solution",
-            "start_segment": 2,
-            "end_segment": 8,
-            "key_points": ["Traditional method limitations", "Why current solutions don't work", "Introduction to better approach"],
-            "social_media_appeal": "Challenges common assumptions and provides valuable insights that developers would want to share"
+            "title": "Catchy Title Here",
+            "post_content": "Complete Twitter thread as single string with \\n for line breaks",
+            "start_segment": 0,
+            "end_segment": 5,
+            "key_points": ["Point 1", "Point 2", "Point 3"]
           }
         ]
       }
       
-      Focus on quality over quantity - it's better to have 3 excellent suggestions than 5 mediocre ones.
+      Do NOT use "tweets" array. Use "post_content" as a single string with \\n line breaks.
+      Output exactly 3-5 Twitter threads, each with clear segment boundaries.
     `;
 
     // Try with different models in sequence until one works
@@ -187,11 +212,11 @@ export async function POST(request: NextRequest) {
     // Try each model in sequence until one works
     for (const model of models) {
       try {
-        console.log(`Trying topic identification with model: ${model}`);
+        console.log(`Trying Twitter post generation with model: ${model}`);
         data = await callOpenRouterWithModel(apiKey, segments, prompt, model);
         selectedModel = model;
         console.log(
-          `Successfully processed topic identification with model: ${model}`
+          `Successfully processed Twitter post generation with model: ${model}`
         );
         break;
       } catch (e) {
@@ -203,11 +228,11 @@ export async function POST(request: NextRequest) {
 
     // If all models failed, return an error
     if (!data) {
-      console.error("All models failed for topic identification:", error);
+      console.error("All models failed for Twitter post generation:", error);
       return NextResponse.json(
         {
-          error: "Failed to identify topics with any available model",
-          topicSuggestions: [],
+          error: "Failed to generate Twitter posts with any available model",
+          twitterPosts: [],
         },
         { status: 200 }
       );
@@ -235,66 +260,97 @@ export async function POST(request: NextRequest) {
 
       console.log("Parsed content:", JSON.stringify(parsedContent, null, 2));
 
-      // Validate the structure
-      if (!parsedContent || !parsedContent.topic_suggestions) {
-        console.log("Expected structure not found, attempting fallback...");
+      // Handle case where AI returns array directly instead of wrapped in twitter_posts
+      if (Array.isArray(parsedContent)) {
+        console.log(
+          "AI returned array directly, converting to expected format..."
+        );
 
-        // Fallback: create a simple suggestion covering all segments
-        const fallbackSuggestion = {
-          title: "Full Video Content",
-          description: "Complete video transcription",
-          start_segment: 0,
-          end_segment: segments.length - 1,
-          key_points: ["Complete video content"],
-          social_media_appeal: "Full video content for social media sharing",
-        };
+        // Convert the array format to our expected format
+        const convertedPosts = parsedContent.map((post: any) => {
+          let postContent = "";
+
+          // If it has tweets array, join them with line breaks
+          if (post.tweets && Array.isArray(post.tweets)) {
+            postContent = post.tweets.join("\n\n");
+          } else if (post.post_content) {
+            postContent = post.post_content;
+          } else {
+            postContent = "Generated Twitter thread content";
+          }
+
+          return {
+            title: post.title || "Generated Thread",
+            post_content: postContent,
+            start_segment: post.start_segment || 0,
+            end_segment: post.end_segment || Math.max(0, segments.length - 1),
+            key_points: post.key_points || ["Generated content"],
+          };
+        });
 
         return NextResponse.json({
-          topicSuggestions: [fallbackSuggestion],
-          warning: "Used fallback topic identification",
+          twitterPosts: convertedPosts,
           model: selectedModel,
         });
       }
 
-      // Validate each suggestion has required fields and valid segment indices
-      const validatedSuggestions = parsedContent.topic_suggestions.filter(
-        (suggestion: any) => {
-          return (
-            suggestion.title &&
-            suggestion.description &&
-            typeof suggestion.start_segment === "number" &&
-            typeof suggestion.end_segment === "number" &&
-            suggestion.start_segment >= 0 &&
-            suggestion.end_segment < segments.length &&
-            suggestion.start_segment <= suggestion.end_segment &&
-            Array.isArray(suggestion.key_points) &&
-            suggestion.social_media_appeal
-          );
-        }
-      );
+      // Validate the structure
+      if (!parsedContent || !parsedContent.twitter_posts) {
+        console.log("Expected structure not found, attempting fallback...");
+
+        // Fallback: create a simple post covering all segments
+        const fallbackPost = {
+          title: "Full Video Content",
+          post_content:
+            "Interesting insights from this video.\n\nWatch the full explanation to learn more.",
+          start_segment: 0,
+          end_segment: segments.length - 1,
+          key_points: ["Complete video content"],
+        };
+
+        return NextResponse.json({
+          twitterPosts: [fallbackPost],
+          warning: "Used fallback Twitter post generation",
+          model: selectedModel,
+        });
+      }
+
+      // Validate each post has required fields and valid segment indices
+      const validatedPosts = parsedContent.twitter_posts.filter((post: any) => {
+        return (
+          post.title &&
+          post.post_content &&
+          typeof post.start_segment === "number" &&
+          typeof post.end_segment === "number" &&
+          post.start_segment >= 0 &&
+          post.end_segment < segments.length &&
+          post.start_segment <= post.end_segment &&
+          Array.isArray(post.key_points)
+        );
+      });
 
       return NextResponse.json({
-        topicSuggestions: validatedSuggestions,
+        twitterPosts: validatedPosts,
         model: selectedModel,
       });
     } catch (e) {
-      console.error("Error parsing topic identification content:", e);
+      console.error("Error parsing Twitter post content:", e);
       console.log("Raw content that failed to parse:", content);
 
       // Return fallback
-      const fallbackSuggestion = {
+      const fallbackPost = {
         title: "Video Content",
-        description: "Video transcription content",
+        post_content:
+          "Valuable insights from this video.\n\nWatch to learn more.",
         start_segment: 0,
         end_segment: Math.max(0, segments.length - 1),
         key_points: ["Video content"],
-        social_media_appeal: "Interesting video content for social sharing",
       };
 
       return NextResponse.json(
         {
-          topicSuggestions: [fallbackSuggestion],
-          error: "Failed to parse topic suggestions, returning fallback",
+          twitterPosts: [fallbackPost],
+          error: "Failed to parse Twitter posts, returning fallback",
           details: e instanceof Error ? e.message : "Unknown error",
           model: selectedModel,
         },
@@ -302,13 +358,13 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error("Error in topic identification:", error);
+    console.error("Error in Twitter post generation:", error);
 
     return NextResponse.json(
       {
-        error: "An error occurred while identifying topics",
+        error: "An error occurred while generating Twitter posts",
         details: error instanceof Error ? error.message : "Unknown error",
-        topicSuggestions: [],
+        twitterPosts: [],
       },
       { status: 200 }
     );

@@ -1,12 +1,6 @@
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { formatLanguage } from "@/app/utils/formatters";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -14,7 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatLanguage } from "@/app/utils/formatters";
+import { Slider } from "@/components/ui/slider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogControls } from "./types";
 
 interface SpeechControlsProps {
@@ -128,7 +128,9 @@ export function SpeechControls({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-80">
                   <p>
-                    Maximum silence duration (in milliseconds) that will be treated as part of a continuous speech segment. Silences shorter than this value will merge adjacent speech segments.
+                    Maximum silence duration (in milliseconds) that will be
+                    treated as part of a continuous speech segment. Silences
+                    shorter than this value will merge adjacent speech segments.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -214,12 +216,6 @@ export function SpeechControls({
       {isDialogProcessing && (
         <div className="flex items-center justify-center mt-4 text-sm text-gray-500">
           This may take a moment for longer videos...
-        </div>
-      )}
-
-      {isTranscribing && (
-        <div className="flex flex-col items-center justify-center mt-4">
-          <p className="text-sm text-gray-500">{transcriptionProgress}</p>
         </div>
       )}
     </div>

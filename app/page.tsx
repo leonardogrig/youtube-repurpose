@@ -10,7 +10,7 @@ import {
   SpeechSegment,
 } from "@/components/types";
 import { UploadCard } from "@/components/UploadCard";
-import { createXmlFromSegments } from "@/lib/utils";
+import { VideoHistoryCard } from "@/components/VideoHistoryCard";
 import { useEffect, useRef, useState } from "react";
 import { TranscriptionProgressButton } from "./components/TranscriptionProgressButton";
 import { TranscriptionProgressDialog } from "./components/TranscriptionProgressDialog";
@@ -114,20 +114,19 @@ export default function Home() {
   const [installationInstructions, setInstallationInstructions] =
     useState<InstallationInstructions | null>(null);
 
-  // Topic identification state
-  const [topicSuggestions, setTopicSuggestions] = useState<
+  // Twitter post generation state
+  const [twitterPosts, setTwitterPosts] = useState<
     Array<{
       title: string;
-      description: string;
+      post_content: string;
       start_segment: number;
       end_segment: number;
       key_points: string[];
-      social_media_appeal: string;
     }>
   >([]);
-  const [isIdentifyingTopics, setIsIdentifyingTopics] =
+  const [isGeneratingTwitterPosts, setIsGeneratingTwitterPosts] =
     useState<boolean>(false);
-  const [topicError, setTopicError] = useState<string | null>(null);
+  const [twitterPostError, setTwitterPostError] = useState<string | null>(null);
 
   const [transcriptionProgressDetails, setTranscriptionProgressDetails] =
     useState<{
@@ -263,11 +262,11 @@ export default function Home() {
           }
 
           if (progressData.type === "complete") {
-            setTranscriptionProgress("100%");
+            setTranscriptionProgress("Finishing...");
             setUploadProgress(0);
             setTranscriptionProgressDetails({
-              currentSegment: 0,
-              totalSegments: 0,
+              currentSegment: progressData.totalSegments || 0,
+              totalSegments: progressData.totalSegments || 0,
               status: "complete",
               message: "Transcription finished.",
               latestResult: undefined,
@@ -282,6 +281,29 @@ export default function Home() {
 
       if (typedResult.segments) {
         setTranscribedSegments(typedResult.segments);
+
+        // Save to database after successful transcription
+        if (videoFile) {
+          try {
+            await fetch("/api/videos", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                fileName: videoFile.name,
+                filePath: videoFilePath || `videos/${videoFile.name}`,
+                fileSize: videoFile.size,
+                duration: originalDuration,
+                language: selectedLanguage,
+                segments: typedResult.segments,
+              }),
+            });
+          } catch (dbError) {
+            console.error("Failed to save transcription to database:", dbError);
+            // Don't throw error here as transcription was successful
+          }
+        }
       }
     } catch (error) {
       console.error("Error transcribing:", error);
@@ -465,36 +487,7 @@ export default function Home() {
       setSpeechPaddingMs(dialogControls.speechPaddingMs);
       setSilencePaddingMs(dialogControls.silencePaddingMs);
 
-      if (videoFileName && videoFilePath) {
-        let filePath = videoFilePath;
-        if (!filePath.includes("/videos/") && filePath.includes("localhost/")) {
-          filePath = `file://localhost/videos/${encodeURIComponent(
-            videoFileName
-          )}`;
-        }
-
-        const xml = createXmlFromSegments(result.segments, {
-          frameRate: 60,
-          width: 2560,
-          height: 1440,
-          pixelAspectRatio: "square",
-          fields: "none",
-          sourceFilePath: filePath,
-        });
-
-        const xmlBlob = new Blob([xml], { type: "application/xml" });
-        const xmlUrl = URL.createObjectURL(xmlBlob);
-        const downloadLink = document.createElement("a");
-        downloadLink.href = xmlUrl;
-        downloadLink.download = `${videoFileName.replace(
-          /\.[^/.]+$/,
-          ""
-        )}_edited.xml`;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(xmlUrl);
-      }
+      // XML export removed from automatic apply - should be a separate feature
     } catch (error) {
       console.error("Error reprocessing in dialog:", error);
     } finally {
@@ -521,43 +514,83 @@ export default function Home() {
 
   const handleDiscardTranscription = () => {
     setTranscribedSegments(null);
-    setTopicSuggestions([]); // Reset topic suggestions
-    setTopicError(null);
+    setTwitterPosts([]); // Reset Twitter posts
+    setTwitterPostError(null);
   };
 
-  const handleIdentifyTopics = async () => {
+  const handleGenerateTwitterPosts = async () => {
     if (!transcribedSegments) return;
 
-    setIsIdentifyingTopics(true);
-    setTopicError(null);
-    setTopicSuggestions([]);
+    setIsGeneratingTwitterPosts(true);
+    setTwitterPostError(null);
+    setTwitterPosts([]);
 
     try {
       // Import the function dynamically to avoid import issues
-      const { identifyTopics } = await import("./services/videoService");
-      const result = await identifyTopics(transcribedSegments);
+      const { generateTwitterPosts } = await import("./services/videoService");
+      const result = await generateTwitterPosts(transcribedSegments);
 
-      if (result.topicSuggestions) {
-        setTopicSuggestions(result.topicSuggestions);
+      if (result.twitterPosts) {
+        setTwitterPosts(result.twitterPosts);
 
         if (result.warning) {
-          setTopicError(`Warning: ${result.warning}`);
+          setTwitterPostError(`Warning: ${result.warning}`);
         } else if (result.error) {
-          setTopicError(`Note: ${result.error}`);
+          setTwitterPostError(`Note: ${result.error}`);
         }
       } else {
-        setTopicError("Failed to identify topics. Please try again.");
+        setTwitterPostError(
+          "Failed to generate Twitter posts. Please try again."
+        );
       }
     } catch (error) {
-      console.error("Error identifying topics:", error);
-      setTopicError(
+      console.error("Error generating Twitter posts:", error);
+      setTwitterPostError(
         error instanceof Error
           ? error.message
-          : "An error occurred during topic identification"
+          : "An error occurred during Twitter post generation"
       );
     } finally {
-      setIsIdentifyingTopics(false);
+      setIsGeneratingTwitterPosts(false);
     }
+  };
+
+  const handleSelectVideoFromHistory = (
+    video: any,
+    segments: SpeechSegment[]
+  ) => {
+    // Clear current video and set from history
+    setVideoFile(null);
+    setVideoSrc(null);
+    setVideoFileName(video.fileName);
+    setVideoFilePath(video.filePath);
+
+    // Set the transcribed segments
+    setTranscribedSegments(segments);
+
+    // Clear other states that might conflict
+    setSilenceSegments(null);
+    setAudioUrl(null);
+    setError(null);
+    setIsTranscribing(false);
+    setTranscriptionError(null);
+
+    // Set language and duration
+    setSelectedLanguage(video.language);
+    setOriginalDuration(video.duration || 0);
+
+    // Calculate total segment duration
+    const totalSegmentDuration = segments.reduce(
+      (acc, segment) => acc + (segment.end - segment.start),
+      0
+    );
+    setTotalSegmentDuration(totalSegmentDuration);
+  };
+
+  const handleDeleteVideoFromHistory = (videoId: string) => {
+    // If the deleted video is currently loaded, clear it
+    // This could be enhanced to check if the current video matches the deleted one
+    console.log(`Video ${videoId} deleted from history`);
   };
 
   useEffect(() => {
@@ -583,6 +616,14 @@ export default function Home() {
           videoSrc={videoSrc}
           videoRef={videoRef}
         />
+
+        {/* Video History Card */}
+        <div className="mb-8">
+          <VideoHistoryCard
+            onSelectVideo={handleSelectVideoFromHistory}
+            onDeleteVideo={handleDeleteVideoFromHistory}
+          />
+        </div>
 
         {videoFile && (
           <>
@@ -621,10 +662,10 @@ export default function Home() {
           <TopicSuggestionsSection
             transcribedSegments={transcribedSegments}
             onDiscardTranscription={handleDiscardTranscription}
-            onIdentifyTopics={handleIdentifyTopics}
-            isIdentifyingTopics={isIdentifyingTopics}
-            topicSuggestions={topicSuggestions}
-            topicError={topicError}
+            onGenerateTwitterPosts={handleGenerateTwitterPosts}
+            isGeneratingTwitterPosts={isGeneratingTwitterPosts}
+            twitterPosts={twitterPosts}
+            twitterPostError={twitterPostError}
             videoFilePath={videoFilePath || undefined}
             uploadInfo={uploadInfo || undefined}
           />

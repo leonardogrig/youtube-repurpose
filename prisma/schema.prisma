@@ -1,0 +1,47 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id        String   @id @default(cuid())
+  fileName  String
+  filePath  String
+  fileSize  Int
+  duration  Float? // Duration in seconds
+  language  String   @default("english")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Transcription segments
+  transcriptionSegments TranscriptionSegment[]
+
+  @@map("videos")
+}
+
+model TranscriptionSegment {
+  id         String  @id @default(cuid())
+  videoId    String
+  startTime  Float // Start time in seconds
+  endTime    Float // End time in seconds
+  text       String
+  confidence Float? // Confidence score if available
+  error      String? // Error message if any
+  skipped    Boolean @default(false)
+
+  // Relation to video
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@map("transcription_segments")
+}

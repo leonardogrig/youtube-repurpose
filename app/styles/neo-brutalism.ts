@@ -65,4 +65,13 @@ export const neoBrutalismStyles = `
     font-weight: bold;
     margin-left: auto;
   }
-`; 
+  .shadow-brutal {
+    box-shadow: 6px 6px 0px #0a0a0a;
+  }
+  .shadow-brutal-lg {
+    box-shadow: 8px 8px 0px #0a0a0a;
+  }
+  .shadow-brutal-sm {
+    box-shadow: 3px 3px 0px #0a0a0a;
+  }
+`;

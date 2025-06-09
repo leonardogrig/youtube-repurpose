@@ -462,14 +462,13 @@ export async function filterTranscribedSegments(
   }
 }
 
-export async function identifyTopics(segments: SpeechSegment[]): Promise<{
-  topicSuggestions: Array<{
+export async function generateTwitterPosts(segments: SpeechSegment[]): Promise<{
+  twitterPosts: Array<{
     title: string;
-    description: string;
+    post_content: string;
     start_segment: number;
     end_segment: number;
     key_points: string[];
-    social_media_appeal: string;
   }>;
   warning?: string;
   error?: string;
@@ -486,48 +485,7 @@ export async function identifyTopics(segments: SpeechSegment[]): Promise<{
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to identify topics");
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error in topic identification:", error);
-    throw error;
-  }
-}
-
-export async function generateTwitterPost(
-  segments: SpeechSegment[],
-  topicInfo: {
-    title: string;
-    description: string;
-    key_points: string[];
-    social_media_appeal: string;
-  }
-): Promise<{
-  twitterPost: {
-    main_post: string;
-    alternative_posts: string[];
-    hashtags: string[];
-    hook_style: string;
-  } | null;
-  warning?: string;
-  error?: string;
-  model?: string;
-}> {
-  try {
-    const response = await fetch("/api/generate-twitter-post", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ segments, topicInfo }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to generate Twitter post");
+      throw new Error(errorData.error || "Failed to generate Twitter posts");
     }
 
     const data = await response.json();
@@ -574,4 +532,36 @@ export async function generateVideoClip(
     console.error("Error in video clip generation:", error);
     throw error;
   }
+}
+
+// Keep the old function for backward compatibility but mark as deprecated
+export async function identifyTopics(segments: SpeechSegment[]): Promise<{
+  topicSuggestions: Array<{
+    title: string;
+    description: string;
+    start_segment: number;
+    end_segment: number;
+    key_points: string[];
+    social_media_appeal: string;
+  }>;
+  warning?: string;
+  error?: string;
+  model?: string;
+}> {
+  // Redirect to the new function and transform the response
+  const result = await generateTwitterPosts(segments);
+
+  return {
+    topicSuggestions: result.twitterPosts.map((post) => ({
+      title: post.title,
+      description: post.post_content.substring(0, 200) + "...", // Truncate for description
+      start_segment: post.start_segment,
+      end_segment: post.end_segment,
+      key_points: post.key_points,
+      social_media_appeal: "Generated Twitter thread content",
+    })),
+    warning: result.warning,
+    error: result.error,
+    model: result.model,
+  };
 }
