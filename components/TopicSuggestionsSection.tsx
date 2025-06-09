@@ -1,8 +1,9 @@
 "use client";
 
 import { generateVideoClip } from "@/app/services/videoService";
+import { SegmentRangeEditor } from "@/components/SegmentRangeEditor";
 import { Button } from "@/components/ui/button";
-import { Copy, Download, Loader2, Play } from "lucide-react";
+import { Copy, Download, Edit, Loader2, Play } from "lucide-react";
 import { useState } from "react";
 import { SpeechSegment } from "./types";
 
@@ -53,6 +54,56 @@ export function TopicSuggestionsSection({
   >({});
   const [clipErrors, setClipErrors] = useState<Record<number, string>>({});
 
+  // New state for segment editing
+  const [editingPostIndex, setEditingPostIndex] = useState<number | null>(null);
+  const [customSegmentRanges, setCustomSegmentRanges] = useState<
+    Record<number, { start_segment: number; end_segment: number }>
+  >({});
+
+  // Get the effective segment range for a post (custom or original)
+  const getEffectiveSegmentRange = (post: TwitterPost, index: number) => {
+    const customRange = customSegmentRanges[index];
+    return (
+      customRange || {
+        start_segment: post.start_segment,
+        end_segment: post.end_segment,
+      }
+    );
+  };
+
+  const handleEditSegmentRange = (index: number) => {
+    setEditingPostIndex(index);
+  };
+
+  const handleApplySegmentRange = (
+    index: number,
+    newStartSegment: number,
+    newEndSegment: number
+  ) => {
+    setCustomSegmentRanges((prev) => ({
+      ...prev,
+      [index]: { start_segment: newStartSegment, end_segment: newEndSegment },
+    }));
+    setEditingPostIndex(null);
+
+    // Clear any existing video clip since the segments changed
+    setVideoClips((prev) => {
+      const newClips = { ...prev };
+      delete newClips[index];
+      return newClips;
+    });
+
+    // Clear any clip errors
+    setClipErrors((prev) => ({
+      ...prev,
+      [index]: "",
+    }));
+  };
+
+  const handleCancelSegmentEdit = () => {
+    setEditingPostIndex(null);
+  };
+
   const handleCopyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -75,8 +126,10 @@ export function TopicSuggestionsSection({
     setClipErrors((prev) => ({ ...prev, [index]: "" }));
 
     try {
-      const startTime = transcribedSegments[post.start_segment].start;
-      const endTime = transcribedSegments[post.end_segment].end;
+      // Use effective segment range (custom or original)
+      const effectiveRange = getEffectiveSegmentRange(post, index);
+      const startTime = transcribedSegments[effectiveRange.start_segment].start;
+      const endTime = transcribedSegments[effectiveRange.end_segment].end;
 
       const result = await generateVideoClip(
         videoFilePath,
@@ -194,14 +247,18 @@ export function TopicSuggestionsSection({
             Generated Twitter Threads:
           </h4>
           {twitterPosts.map((post, index) => {
+            // Use effective segment range for calculations
+            const effectiveRange = getEffectiveSegmentRange(post, index);
             const postSegments = transcribedSegments.slice(
-              post.start_segment,
-              post.end_segment + 1
+              effectiveRange.start_segment,
+              effectiveRange.end_segment + 1
             );
             const duration = formatDuration(postSegments);
             const videoClip = videoClips[index];
             const clipError = clipErrors[index];
             const isGeneratingClip = generatingClipFor === index;
+            const isEditing = editingPostIndex === index;
+            const hasCustomRange = customSegmentRanges[index] !== undefined;
 
             return (
               <div
@@ -249,18 +306,49 @@ export function TopicSuggestionsSection({
                   </ul>
                 </div>
 
+                {/* Segment Range Editing */}
+                {isEditing && (
+                  <SegmentRangeEditor
+                    startSegment={effectiveRange.start_segment}
+                    endSegment={effectiveRange.end_segment}
+                    totalSegments={transcribedSegments.length}
+                    onApply={(newStart: number, newEnd: number) =>
+                      handleApplySegmentRange(index, newStart, newEnd)
+                    }
+                    onCancel={handleCancelSegmentEdit}
+                  />
+                )}
+
                 {/* Video Clip Section */}
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center mb-3">
                     <h6 className="text-sm font-medium text-gray-700">
                       Video Clip
                     </h6>
-                    <div className="text-xs text-gray-500">
-                      Segments {post.start_segment + 1}-{post.end_segment + 1}
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-gray-500">
+                        Segments {effectiveRange.start_segment + 1}-
+                        {effectiveRange.end_segment + 1}
+                        {hasCustomRange && (
+                          <span className="ml-1 text-orange-600 font-bold">
+                            (Modified)
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditSegmentRange(index)}
+                        disabled={isEditing}
+                        className="neo-brutalism-button bg-orange-400 hover:bg-orange-500 text-white"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit Range
+                      </Button>
                     </div>
                   </div>
 
-                  {!videoClip && !isGeneratingClip && (
+                  {!videoClip && !isGeneratingClip && !isEditing && (
                     <Button
                       onClick={() => handleGenerateVideoClip(post, index)}
                       className="w-full mb-2"

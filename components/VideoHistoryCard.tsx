@@ -233,37 +233,52 @@ export function VideoHistoryCard({
 
                 {expandedVideo === video.id && (
                   <div className="mt-4 border-t-2 border-black pt-4">
-                    <h4 className="font-bold mb-2">Transcription Preview:</h4>
-                    <div className="max-h-64 overflow-y-auto border-2 border-gray-300 bg-gray-50 p-3">
-                      {video.transcriptionSegments
-                        .slice(0, 10)
-                        .map((segment, index) => (
-                          <div
-                            key={segment.id}
-                            className="mb-2 pb-2 border-b border-gray-300 last:border-b-0"
-                          >
-                            <div className="flex justify-between items-start mb-1">
+                    <h4 className="font-bold mb-2">
+                      All Transcription Segments:
+                    </h4>
+                    <div className="max-h-96 overflow-y-auto border-2 border-gray-300 bg-gray-50 p-3">
+                      {video.transcriptionSegments.map((segment, index) => (
+                        <div
+                          key={segment.id}
+                          className="mb-3 pb-3 border-b border-gray-300 last:border-b-0"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex gap-2 items-center flex-wrap">
+                              <span className="text-xs font-bold bg-blue-300 px-2 py-1 border border-black">
+                                Segment #{index + 1}
+                              </span>
                               <span className="text-xs font-bold bg-yellow-300 px-2 py-1 border border-black">
                                 {segment.startTime.toFixed(1)}s -{" "}
                                 {segment.endTime.toFixed(1)}s
                               </span>
-                              {segment.error && (
-                                <span className="text-xs bg-red-200 px-2 py-1 border border-black">
-                                  Error
-                                </span>
-                              )}
+                              <span className="text-xs bg-green-200 px-2 py-1 border border-black">
+                                {(segment.endTime - segment.startTime).toFixed(
+                                  1
+                                )}
+                                s duration
+                              </span>
                             </div>
-                            <p className="text-sm">
+                            {segment.error && (
+                              <span className="text-xs bg-red-200 px-2 py-1 border border-black">
+                                Error
+                              </span>
+                            )}
+                          </div>
+                          <div className="bg-white p-2 border border-gray-400 rounded">
+                            <p className="text-sm leading-relaxed">
                               {segment.text || "No text"}
                             </p>
                           </div>
-                        ))}
-                      {video.transcriptionSegments.length > 10 && (
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          ... and {video.transcriptionSegments.length - 10} more
-                          segments
-                        </p>
-                      )}
+                          {segment.confidence && (
+                            <div className="mt-1">
+                              <span className="text-xs text-gray-600">
+                                Confidence:{" "}
+                                {(segment.confidence * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

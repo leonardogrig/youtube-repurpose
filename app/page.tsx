@@ -659,16 +659,18 @@ export default function Home() {
         )}
 
         {transcribedSegments && (
-          <TopicSuggestionsSection
-            transcribedSegments={transcribedSegments}
-            onDiscardTranscription={handleDiscardTranscription}
-            onGenerateTwitterPosts={handleGenerateTwitterPosts}
-            isGeneratingTwitterPosts={isGeneratingTwitterPosts}
-            twitterPosts={twitterPosts}
-            twitterPostError={twitterPostError}
-            videoFilePath={videoFilePath || undefined}
-            uploadInfo={uploadInfo || undefined}
-          />
+          <>
+            <TopicSuggestionsSection
+              transcribedSegments={transcribedSegments}
+              onDiscardTranscription={handleDiscardTranscription}
+              onGenerateTwitterPosts={handleGenerateTwitterPosts}
+              isGeneratingTwitterPosts={isGeneratingTwitterPosts}
+              twitterPosts={twitterPosts}
+              twitterPostError={twitterPostError}
+              videoFilePath={videoFilePath || undefined}
+              uploadInfo={uploadInfo || undefined}
+            />
+          </>
         )}
 
         <TranscriptionWarningDialog

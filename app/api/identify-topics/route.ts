@@ -136,13 +136,15 @@ export async function POST(request: NextRequest) {
       You are given a JSON transcription of a video as an array of segments.
       Each segment has 'start' (seconds), 'end' (seconds), and 'text' (transcribed speech).
 
-      Your task is to analyze the entire transcription and create 3-5 compelling Twitter threads that would go viral. Each thread should:
+      Your task is to analyze the entire transcription and create a compelling Twitter thread (5 - 8 posts(tweets)). 
+      
+      Each post of the thread should:
       
       1. Cover a coherent section of the video (specify start_segment and end_segment indices)
       2. Be formatted as a complete Twitter thread as a SINGLE STRING with line breaks
       3. Follow this EXACT style and structure:
       
-      EXAMPLE FORMAT:
+      EXAMPLE FORMAT (first post):
       
       Google's CEO just had the most important AI interview of 2025.
       
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
       Here are my top 8 takeaways:
       (No. 6 will terrify you)
       
-      OR
+      OR (second post):
       
       1. Token Explosion
       
@@ -170,7 +172,6 @@ export async function POST(request: NextRequest) {
       - Create intrigue with phrases like "99% of people don't know this" or "This will shock you"
       - Use line breaks strategically for readability
       - Make numbered points when listing takeaways
-      - Each thread should be 3-10 tweets long
       - Focus on the most valuable, surprising, or controversial insights
       - Make people want to watch the video to learn more
       
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest) {
       - Each suggestion should cover consecutive segments (start_segment to end_segment)
       - Segments should contain complete thoughts or concepts
       - Prioritize content with high viral potential (shocking facts, valuable insights, controversial takes)
-      - Each thread should typically represent 30 seconds to 3 minutes of video content
+      - Each post should typically represent 30 seconds to 3 minutes of video content
       
       CRITICAL: You MUST return the response in this EXACT JSON format:
       
@@ -186,23 +187,19 @@ export async function POST(request: NextRequest) {
         "twitter_posts": [
           {
             "title": "Catchy Title Here",
-            "post_content": "Complete Twitter thread as single string with \\n for line breaks",
+            "post_content": "Complete Twitter post as single string with \\n for line breaks",
             "start_segment": 0,
             "end_segment": 5,
             "key_points": ["Point 1", "Point 2", "Point 3"]
           }
         ]
       }
-      
-      Do NOT use "tweets" array. Use "post_content" as a single string with \\n line breaks.
-      Output exactly 3-5 Twitter threads, each with clear segment boundaries.
     `;
 
     // Try with different models in sequence until one works
     const models = [
-      "google/gemini-2.0-flash-001",
-      "google/gemini-2.5-pro-exp-03-25:free",
-      "openai/gpt-4o-2024-11-20",
+      "google/gemini-2.5-flash-preview-05-20",
+      "openai/gpt-4o-mini",
     ];
 
     let data;
