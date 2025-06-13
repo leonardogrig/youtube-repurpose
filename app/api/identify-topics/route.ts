@@ -1,54 +1,40 @@
 import { SpeechSegment } from "@/components/types";
 import { NextRequest, NextResponse } from "next/server";
 
-// Schema for Twitter post generation with segments
-const TwitterPostWithSegmentsSchema = {
+// Schema for X post generation with time ranges
+const XPostWithTimeRangesSchema = {
   type: "object",
   properties: {
-    twitter_posts: {
+    x_posts: {
       type: "array",
       description:
-        "A list of Twitter thread posts with their corresponding segment ranges.",
+        "A list of X thread posts with their corresponding time ranges in seconds.",
       items: {
         type: "object",
         properties: {
-          title: {
-            type: "string",
-            description: "A catchy title for this Twitter thread",
-          },
           post_content: {
             type: "string",
             description:
               "The complete Twitter thread content formatted with line breaks as a single string",
           },
-          start_segment: {
+          start_time: {
             type: "number",
             description:
-              "The index of the first segment in this post (0-based)",
+              "The start time in seconds for this post content in the video",
           },
-          end_segment: {
+          end_time: {
             type: "number",
-            description: "The index of the last segment in this post (0-based)",
-          },
-          key_points: {
-            type: "array",
-            description: "Main key points covered in this Twitter thread",
-            items: {
-              type: "string",
-            },
+            description:
+              "The end time in seconds for this post content in the video",
           },
         },
-        required: [
-          "title",
-          "post_content",
-          "start_segment",
-          "end_segment",
-          "key_points",
-        ],
+        required: ["post_content", "start_time", "end_time"],
+        additionalProperties: false,
       },
     },
   },
-  required: ["twitter_posts"],
+  required: ["x_posts"],
+  additionalProperties: false,
 };
 
 // Add API route configuration
@@ -67,6 +53,18 @@ async function callOpenRouterWithModel(
   prompt: string,
   model: string
 ) {
+  // Clean up segments data - only keep start, end, and text
+  const cleanedSegments = segments.map((segment) => ({
+    start_time: segment.start,
+    end_time: segment.end,
+    transcription: segment.text,
+  }));
+
+  console.log(
+    "Cleaned segments data:",
+    JSON.stringify(cleanedSegments.slice(0, 3), null, 2)
+  );
+
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
     {
@@ -81,11 +79,15 @@ async function callOpenRouterWithModel(
         model: model,
         messages: [
           { role: "system", content: prompt },
-          { role: "user", content: JSON.stringify(segments) },
+          { role: "user", content: JSON.stringify(cleanedSegments) },
         ],
         response_format: {
-          type: "json_object",
-          schema: TwitterPostWithSegmentsSchema,
+          type: "json_schema",
+          json_schema: {
+            name: "x_posts_schema",
+            strict: true,
+            schema: XPostWithTimeRangesSchema,
+          },
         },
       }),
     }
@@ -129,75 +131,105 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Calculate content duration to adjust number of threads
+    const totalDuration =
+      segments.length > 0 ? segments[segments.length - 1].end : 0;
+    const isLongForm = totalDuration > 3600; // More than 1 hour
+
+    const expectedThreadCount = isLongForm ? "8-15 threads" : "5-8 threads";
+    const contentAnalysisDepth = isLongForm
+      ? "multiple major topics and subtopics"
+      : "key topics and insights";
+
     // Build a detailed prompt for Twitter thread generation
     const prompt = `
-      You are a viral Twitter/X content expert who creates highly engaging Twitter threads that drive massive engagement.
-      
-      You are given a JSON transcription of a video as an array of segments.
-      Each segment has 'start' (seconds), 'end' (seconds), and 'text' (transcribed speech).
+You are an X (Twitter) content expert creating viral threads for an AI-focused audience.
 
-      Your task is to analyze the entire transcription and create a compelling Twitter thread (5 - 8 posts(tweets)). 
-      
-      Each post of the thread should:
-      
-      1. Cover a coherent section of the video (specify start_segment and end_segment indices)
-      2. Be formatted as a complete Twitter thread as a SINGLE STRING with line breaks
-      3. Follow this EXACT style and structure:
-      
-      EXAMPLE FORMAT (first post):
-      
-      Google's CEO just had the most important AI interview of 2025.
-      
-      He revealed mind-blowing facts about artificial general intelligence that 99% of people wouldn't know...
-      
-      Including when the singularity actually happens.
-      
-      Here are my top 8 takeaways:
-      (No. 6 will terrify you)
-      
-      OR (second post):
-      
-      1. Token Explosion
-      
-      Google's Gemini: 9.7 trillion → 480 trillion tokens per month.
-      
-      That's 50x growth in 12 months.
-      
-      Each token = someone getting an "aha moment" from AI.
+TARGET TOPICS (Priority Order):
+- AI developments, breakthroughs, and research
+- AI tools and models (ChatGPT, Claude, Gemini, etc.)
+- Machine Learning and Deep Learning innovations
+- AI startup funding and market trends
+- Developer tools enhanced by AI
+- AI predictions and future implications
 
-      REQUIREMENTS:
-      - Start with a hook that creates curiosity and urgency
-      - Use short, punchy sentences
-      - Include specific numbers, statistics, or facts when available
-      - Create intrigue with phrases like "99% of people don't know this" or "This will shock you"
-      - Use line breaks strategically for readability
-      - Make numbered points when listing takeaways
-      - Focus on the most valuable, surprising, or controversial insights
-      - Make people want to watch the video to learn more
-      
-      Guidelines for segment selection:
-      - Each suggestion should cover consecutive segments (start_segment to end_segment)
-      - Segments should contain complete thoughts or concepts
-      - Prioritize content with high viral potential (shocking facts, valuable insights, controversial takes)
-      - Each post should typically represent 30 seconds to 3 minutes of video content
-      
-      CRITICAL: You MUST return the response in this EXACT JSON format:
-      
-      {
-        "twitter_posts": [
-          {
-            "title": "Catchy Title Here",
-            "post_content": "Complete Twitter post as single string with \\n for line breaks",
-            "start_segment": 0,
-            "end_segment": 5,
-            "key_points": ["Point 1", "Point 2", "Point 3"]
-          }
-        ]
-      }
-    `;
+INPUT: JSON transcription with time segments containing 'start_time', 'end_time' (in seconds), and 'transcription' fields.
+ANALYSIS: ${Math.round(totalDuration / 60)} minutes (${
+      isLongForm ? "LONG-FORM" : "SHORT-FORM"
+    })
+OUTPUT: ${expectedThreadCount} posts extracting ${contentAnalysisDepth}
+
+CORE REQUIREMENT: Content MUST match transcription text exactly.
+
+FORMATTING RULES:
+- Use line breaks for readability (separate sentences/ideas with \\n\\n)
+- Add relevant emojis when they enhance the message (🤖 🚀 💡 🔥 ⚡ 🎯 📈 🛠️ 🧠 💻)
+- NO hashtags - they reduce engagement on modern X
+- Keep each post under 280 characters including line breaks
+- Use conversational, engaging tone
+- Break long thoughts into multiple short, punchy sentences
+
+PROCESS:
+1. Scan all segments for AI-relevant content
+2. Identify specific time ranges containing target topics
+3. Write posts using ONLY content from selected time ranges
+4. Format with proper line breaks and emojis
+5. Verify post content matches transcription text before finalizing
+
+TIME RANGE SELECTION RULES:
+- Maximum 5 minutes (300 seconds) per post
+- start_time and end_time must be in seconds and contain the referenced topic
+- No mixing unrelated topics within a single post
+- Skip segments with minimal or empty transcription
+- Ensure sequential logical flow
+
+CONTENT VERIFICATION:
+- Direct quotes must appear in selected time ranges
+- Claims must be supported by transcription text
+- Numbers and data must exist in transcription
+- Topics discussed must match transcription content
+
+THREAD STRUCTURE:
+POST 1: Hook with most compelling insight from specific time range
+POSTS 2-N: Sequential narrative using different time ranges (1/, 2/, 3/ format)
+
+EXAMPLE FORMAT:
+"🚀 AI is dramatically increasing engineering velocity.
+
+While 30% of code now uses AI suggestions, Google's overall engineering productivity jumped 10%.
+
+This frees up engineers for more creative problem-solving and brainstorming.
+
+The result? Coding is becoming more fun than ever."
+
+FORBIDDEN:
+- Adding information not in transcription
+- Using hashtags (#)
+- Single-line walls of text without breaks
+- Using time range about Topic A to write about Topic B
+- Creating content that "sounds good" but doesn't match transcription
+- Mixing unrelated time ranges
+
+REQUIRED JSON OUTPUT:
+{
+  "x_posts": [
+    {
+      "post_content": "[Content with line breaks and emojis matching time range exactly]",
+      "start_time": 120.5,
+      "end_time": 185.2
+    },
+    {
+      "post_content": "1/ [Content with line breaks and emojis matching time range exactly]",
+      "start_time": 240.1,
+      "end_time": 305.7
+    }
+  ]
+}
+`;
 
     // Try with different models in sequence until one works
     const models = [
+      "anthropic/claude-sonnet-4",
       "google/gemini-2.5-flash-preview-05-20",
       "openai/gpt-4o-mini",
     ];
@@ -209,11 +241,11 @@ export async function POST(request: NextRequest) {
     // Try each model in sequence until one works
     for (const model of models) {
       try {
-        console.log(`Trying Twitter post generation with model: ${model}`);
+        console.log(`Trying X post generation with model: ${model}`);
         data = await callOpenRouterWithModel(apiKey, segments, prompt, model);
         selectedModel = model;
         console.log(
-          `Successfully processed Twitter post generation with model: ${model}`
+          `Successfully processed X post generation with model: ${model}`
         );
         break;
       } catch (e) {
@@ -225,10 +257,10 @@ export async function POST(request: NextRequest) {
 
     // If all models failed, return an error
     if (!data) {
-      console.error("All models failed for Twitter post generation:", error);
+      console.error("All models failed for X post generation:", error);
       return NextResponse.json(
         {
-          error: "Failed to generate Twitter posts with any available model",
+          error: "Failed to generate X posts with any available model",
           twitterPosts: [],
         },
         { status: 200 }
@@ -250,7 +282,33 @@ export async function POST(request: NextRequest) {
       if (typeof content === "object" && content !== null) {
         parsedContent = content;
       } else if (typeof content === "string") {
-        parsedContent = JSON.parse(content);
+        // First try to parse as direct JSON
+        try {
+          parsedContent = JSON.parse(content);
+        } catch (e) {
+          // If that fails, try to extract JSON from markdown code blocks
+          console.log(
+            "Direct JSON parsing failed, trying to extract from markdown..."
+          );
+
+          // Look for JSON within ```json blocks
+          const jsonMatch = content.match(/```json\s*\n([\s\S]*?)\n```/);
+          if (jsonMatch) {
+            console.log("Found JSON in markdown code block");
+            parsedContent = JSON.parse(jsonMatch[1]);
+          } else {
+            // Look for any JSON-like structure
+            const jsonStart = content.indexOf("{");
+            const jsonEnd = content.lastIndexOf("}");
+            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+              console.log("Attempting to extract JSON from text...");
+              const jsonText = content.substring(jsonStart, jsonEnd + 1);
+              parsedContent = JSON.parse(jsonText);
+            } else {
+              throw new Error("No valid JSON found in response");
+            }
+          }
+        }
       } else {
         throw new Error(`Unexpected content type: ${typeof content}`);
       }
@@ -273,15 +331,15 @@ export async function POST(request: NextRequest) {
           } else if (post.post_content) {
             postContent = post.post_content;
           } else {
-            postContent = "Generated Twitter thread content";
+            postContent = "Generated X thread content";
           }
 
           return {
-            title: post.title || "Generated Thread",
             post_content: postContent,
-            start_segment: post.start_segment || 0,
-            end_segment: post.end_segment || Math.max(0, segments.length - 1),
-            key_points: post.key_points || ["Generated content"],
+            start_time: post.start_time || 0,
+            end_time:
+              post.end_time ||
+              Math.max(0, segments[segments.length - 1]?.end || 0),
           };
         });
 
@@ -292,38 +350,51 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate the structure
-      if (!parsedContent || !parsedContent.twitter_posts) {
+      if (!parsedContent || !parsedContent.x_posts) {
         console.log("Expected structure not found, attempting fallback...");
 
         // Fallback: create a simple post covering all segments
         const fallbackPost = {
-          title: "Full Video Content",
           post_content:
             "Interesting insights from this video.\n\nWatch the full explanation to learn more.",
-          start_segment: 0,
-          end_segment: segments.length - 1,
-          key_points: ["Complete video content"],
+          start_time: 0,
+          end_time: segments[segments.length - 1]?.end || 0,
         };
 
         return NextResponse.json({
           twitterPosts: [fallbackPost],
-          warning: "Used fallback Twitter post generation",
+          warning: "Used fallback X post generation",
           model: selectedModel,
         });
       }
 
-      // Validate each post has required fields and valid segment indices
-      const validatedPosts = parsedContent.twitter_posts.filter((post: any) => {
-        return (
-          post.title &&
+      // Validate each post has required fields - preserve original time ranges
+      const validatedPosts = parsedContent.x_posts.filter((post: any) => {
+        const isValid =
           post.post_content &&
-          typeof post.start_segment === "number" &&
-          typeof post.end_segment === "number" &&
-          post.start_segment >= 0 &&
-          post.end_segment < segments.length &&
-          post.start_segment <= post.end_segment &&
-          Array.isArray(post.key_points)
-        );
+          typeof post.start_time === "number" &&
+          typeof post.end_time === "number" &&
+          post.start_time >= 0 &&
+          post.end_time >= 0 &&
+          post.start_time <= post.end_time;
+
+        if (!isValid) {
+          console.log(
+            "Filtered out invalid post - time range:",
+            post.start_time,
+            "to",
+            post.end_time
+          );
+        } else {
+          console.log(
+            "Validated post - time range:",
+            post.start_time,
+            "to",
+            post.end_time
+          );
+        }
+
+        return isValid;
       });
 
       return NextResponse.json({
@@ -331,23 +402,21 @@ export async function POST(request: NextRequest) {
         model: selectedModel,
       });
     } catch (e) {
-      console.error("Error parsing Twitter post content:", e);
+      console.error("Error parsing X post content:", e);
       console.log("Raw content that failed to parse:", content);
 
       // Return fallback
       const fallbackPost = {
-        title: "Video Content",
         post_content:
           "Valuable insights from this video.\n\nWatch to learn more.",
-        start_segment: 0,
-        end_segment: Math.max(0, segments.length - 1),
-        key_points: ["Video content"],
+        start_time: 0,
+        end_time: Math.max(0, segments[segments.length - 1]?.end || 0),
       };
 
       return NextResponse.json(
         {
           twitterPosts: [fallbackPost],
-          error: "Failed to parse Twitter posts, returning fallback",
+          error: "Failed to parse X posts, returning fallback",
           details: e instanceof Error ? e.message : "Unknown error",
           model: selectedModel,
         },
@@ -355,11 +424,11 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error("Error in Twitter post generation:", error);
+    console.error("Error in X post generation:", error);
 
     return NextResponse.json(
       {
-        error: "An error occurred while generating Twitter posts",
+        error: "An error occurred while generating X posts",
         details: error instanceof Error ? error.message : "Unknown error",
         twitterPosts: [],
       },

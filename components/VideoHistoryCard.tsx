@@ -9,8 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { convertToSpeechSegments } from "@/lib/database";
-import { useEffect, useState } from "react";
+import { Edit, Eye, Save, X } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { SpeechSegment } from "./types";
 
 interface VideoHistoryItem {
@@ -30,21 +32,50 @@ interface VideoHistoryItem {
     error: string | null;
     skipped: boolean;
   }[];
+  threads?: {
+    id: string;
+    title: string;
+    createdAt: string;
+    posts: {
+      id: string;
+      title: string;
+      postContent: string;
+      startSegment: number;
+      endSegment: number;
+      orderIndex: number;
+    }[];
+  }[];
 }
 
 interface VideoHistoryCardProps {
   onSelectVideo: (video: VideoHistoryItem, segments: SpeechSegment[]) => void;
   onDeleteVideo: (videoId: string) => void;
+  onLoadThread?: (
+    threadId: string,
+    videoData: VideoHistoryItem,
+    segments: SpeechSegment[]
+  ) => void;
+  onRefreshNeeded?: () => void;
 }
 
-export function VideoHistoryCard({
-  onSelectVideo,
-  onDeleteVideo,
-}: VideoHistoryCardProps) {
+export interface VideoHistoryCardRef {
+  refresh: () => void;
+}
+
+export const VideoHistoryCard = forwardRef<
+  VideoHistoryCardRef,
+  VideoHistoryCardProps
+>(({ onSelectVideo, onDeleteVideo, onLoadThread }, ref) => {
   const [videos, setVideos] = useState<VideoHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedVideo, setExpandedVideo] = useState<string | null>(null);
+  const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
+
+  useImperativeHandle(ref, () => ({
+    refresh: fetchVideoHistory,
+  }));
 
   useEffect(() => {
     fetchVideoHistory();
@@ -53,7 +84,7 @@ export function VideoHistoryCard({
   const fetchVideoHistory = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/videos");
+      const response = await fetch("/api/get-video-history");
 
       if (!response.ok) {
         throw new Error("Failed to fetch video history");
@@ -121,6 +152,66 @@ export function VideoHistoryCard({
     setExpandedVideo(expandedVideo === videoId ? null : videoId);
   };
 
+  const startEditingName = (video: VideoHistoryItem) => {
+    setEditingVideoId(video.id);
+    setEditingName(video.fileName);
+  };
+
+  const cancelEditingName = () => {
+    setEditingVideoId(null);
+    setEditingName("");
+  };
+
+  const saveVideoName = async (videoId: string) => {
+    if (!editingName.trim()) {
+      alert("Video name cannot be empty");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/update-video-name", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId,
+          newName: editingName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update video name");
+      }
+
+      // Update local state
+      setVideos(
+        videos.map((v) =>
+          v.id === videoId ? { ...v, fileName: editingName.trim() } : v
+        )
+      );
+
+      setEditingVideoId(null);
+      setEditingName("");
+    } catch (err) {
+      console.error("Error updating video name:", err);
+      alert("Failed to update video name. Please try again.");
+    }
+  };
+
+  const loadThread = async (threadId: string, video: VideoHistoryItem) => {
+    if (!onLoadThread) return;
+
+    const segments = convertToSpeechSegments(video.transcriptionSegments);
+    onLoadThread(threadId, video, segments);
+  };
+
+  const formatThreadDate = (dateString: string): string => {
+    return (
+      new Date(dateString).toLocaleDateString() +
+      " at " +
+      new Date(dateString).toLocaleTimeString()
+    );
+  };
+
   if (isLoading) {
     return (
       <Card className="w-full neo-brutalism-card">
@@ -184,9 +275,44 @@ export function VideoHistoryCard({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg mb-2 break-words">
-                      {video.fileName}
-                    </h3>
+                    {editingVideoId === video.id ? (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Input
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="border-2 border-black neo-brutalism-input flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          onClick={() => saveVideoName(video.id)}
+                          className="neo-brutalism-button bg-green-500 hover:bg-green-600 text-white p-2"
+                          size="sm"
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          onClick={cancelEditingName}
+                          className="neo-brutalism-button bg-red-500 hover:bg-red-600 text-white p-2"
+                          size="sm"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-bold text-lg break-words flex-1">
+                          {video.fileName}
+                        </h3>
+                        <Button
+                          onClick={() => startEditingName(video)}
+                          className="neo-brutalism-button bg-gray-400 hover:bg-gray-500 text-white p-1"
+                          size="sm"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-3">
                       <Badge className="neo-brutalism-button bg-blue-200 text-black border-2 border-black px-2 py-1">
                         {video.language}
@@ -200,11 +326,52 @@ export function VideoHistoryCard({
                       <Badge className="neo-brutalism-button bg-purple-200 text-black border-2 border-black px-2 py-1">
                         {video.transcriptionSegments.length} segments
                       </Badge>
+                      {video.threads && video.threads.length > 0 && (
+                        <Badge className="neo-brutalism-button bg-orange-200 text-black border-2 border-black px-2 py-1">
+                          {video.threads.length} X threads
+                        </Badge>
+                      )}
                     </div>
+
                     <p className="text-sm text-gray-600 mb-3">
                       Created: {new Date(video.createdAt).toLocaleDateString()}{" "}
                       at {new Date(video.createdAt).toLocaleTimeString()}
                     </p>
+
+                    {/* X Threads Section */}
+                    {video.threads && video.threads.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="font-bold text-sm mb-2">X Threads:</h4>
+                        <div className="space-y-2">
+                          {video.threads.map((thread) => (
+                            <div
+                              key={thread.id}
+                              className="border border-gray-300 rounded bg-gray-50 p-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <span className="text-sm font-medium">
+                                    {thread.title}
+                                  </span>
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    ({thread.posts.length} posts) -{" "}
+                                    {formatThreadDate(thread.createdAt)}
+                                  </span>
+                                </div>
+                                <Button
+                                  onClick={() => loadThread(thread.id, video)}
+                                  className="neo-brutalism-button bg-blue-400 hover:bg-blue-500 text-white p-1"
+                                  size="sm"
+                                  title="Load thread in main interface"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col gap-2 ml-4">
                     <Button
@@ -289,4 +456,6 @@ export function VideoHistoryCard({
       </CardContent>
     </Card>
   );
-}
+});
+
+VideoHistoryCard.displayName = "VideoHistoryCard";

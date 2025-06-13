@@ -67,6 +67,7 @@ interface SilenceRemovalCardProps {
   uploadProgress?: number;
   uploadMessage?: string;
   processingStatus?: string;
+  hasManualTranscriptionText?: boolean;
 }
 
 export function SilenceRemovalCard({
@@ -95,6 +96,7 @@ export function SilenceRemovalCard({
   uploadProgress = 0,
   uploadMessage = "",
   processingStatus = "",
+  hasManualTranscriptionText = false,
 }: SilenceRemovalCardProps) {
   const showUploadProgress =
     isLoading && (uploadProgress > 0 || processingStatus !== "");
@@ -121,7 +123,12 @@ export function SilenceRemovalCard({
         {!silenceSegments && (
           <Button
             onClick={onRemoveSilence}
-            disabled={isLoading || !videoFile}
+            disabled={
+              isLoading ||
+              !videoFile ||
+              !!transcribedSegments ||
+              hasManualTranscriptionText
+            }
             className="neo-brutalism-button w-full"
           >
             {isLoading ? (
@@ -130,6 +137,10 @@ export function SilenceRemovalCard({
                   ? `Uploading ${uploadProgress}%`
                   : processingStatus || "Processing..."}
               </>
+            ) : transcribedSegments ? (
+              "Transcription Already Available"
+            ) : hasManualTranscriptionText ? (
+              "Manual Transcription Text Entered"
             ) : (
               "Generate Segments"
             )}

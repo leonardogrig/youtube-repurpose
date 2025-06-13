@@ -1,14 +1,15 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { SpeechSegment } from "./types";
 
 interface SegmentRangeEditorProps {
   startSegment: number;
   endSegment: number;
-  totalSegments: number;
+  segments: SpeechSegment[]; // Changed from totalSegments to actual segments
   onApply: (newStartSegment: number, newEndSegment: number) => void;
   onCancel: () => void;
 }
@@ -16,157 +17,233 @@ interface SegmentRangeEditorProps {
 export function SegmentRangeEditor({
   startSegment,
   endSegment,
-  totalSegments,
+  segments,
   onApply,
   onCancel,
 }: SegmentRangeEditorProps) {
-  const [newStartSegment, setNewStartSegment] = useState(startSegment);
-  const [newEndSegment, setNewEndSegment] = useState(endSegment);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [tempStartSegment, setTempStartSegment] = useState(startSegment);
+  const [tempEndSegment, setTempEndSegment] = useState(endSegment);
 
-  const validateRange = (start: number, end: number): string[] => {
-    const validationErrors: string[] = [];
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
 
-    if (start < 0) {
-      validationErrors.push("Start segment cannot be negative");
-    }
-
-    if (end >= totalSegments) {
-      validationErrors.push(`End segment cannot exceed ${totalSegments - 1}`);
-    }
-
-    if (start > end) {
-      validationErrors.push("Start segment cannot be greater than end segment");
-    }
-
-    return validationErrors;
-  };
-
-  const handleStartChange = (value: string) => {
-    const numValue = parseInt(value, 10);
-    if (!isNaN(numValue)) {
-      setNewStartSegment(numValue);
-      setErrors(validateRange(numValue, newEndSegment));
-    }
-  };
-
-  const handleEndChange = (value: string) => {
-    const numValue = parseInt(value, 10);
-    if (!isNaN(numValue)) {
-      setNewEndSegment(numValue);
-      setErrors(validateRange(newStartSegment, numValue));
-    }
-  };
-
-  const handleApply = () => {
-    const validationErrors = validateRange(newStartSegment, newEndSegment);
-    if (validationErrors.length === 0) {
-      onApply(newStartSegment, newEndSegment);
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+        .toString()
+        .padStart(2, "0")}`;
     } else {
-      setErrors(validationErrors);
+      return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
     }
   };
 
-  const isValid = errors.length === 0;
-  const hasChanges =
-    newStartSegment !== startSegment || newEndSegment !== endSegment;
+  const handleStartChange = (newValue: number) => {
+    const clampedValue = Math.max(0, Math.min(newValue, segments.length - 1));
+    setTempStartSegment(clampedValue);
+    // Ensure end segment is not before start segment
+    if (tempEndSegment < clampedValue) {
+      setTempEndSegment(clampedValue);
+    }
+  };
+
+  const handleEndChange = (newValue: number) => {
+    const clampedValue = Math.max(
+      tempStartSegment,
+      Math.min(newValue, segments.length - 1)
+    );
+    setTempEndSegment(clampedValue);
+  };
+
+  const getCurrentSegmentInfo = (index: number) => {
+    if (index >= 0 && index < segments.length) {
+      const segment = segments[index];
+      return {
+        start: formatTime(segment.start),
+        end: formatTime(segment.end),
+        duration: (segment.end - segment.start).toFixed(1),
+      };
+    }
+    return { start: "0:00", end: "0:00", duration: "0.0" };
+  };
+
+  const startInfo = getCurrentSegmentInfo(tempStartSegment);
+  const endInfo = getCurrentSegmentInfo(tempEndSegment);
 
   return (
-    <div className="border-2 border-black bg-yellow-100 p-4 mb-4">
-      <h4 className="font-bold mb-3 text-lg">Edit Segment Range</h4>
+    <div className="p-4 border-2 border-orange-400 bg-orange-50 rounded-lg mb-4">
+      <h4 className="font-bold text-orange-800 mb-4">Edit Segment Range</h4>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        {/* Start Segment Selector */}
         <div>
-          <Label
-            htmlFor="start-segment"
-            className="text-sm font-bold mb-2 block"
-          >
-            Start Segment (1-based)
-          </Label>
-          <Input
-            id="start-segment"
-            type="number"
-            min="1"
-            max={totalSegments}
-            value={newStartSegment + 1}
-            onChange={(e) =>
-              handleStartChange((parseInt(e.target.value, 10) - 1).toString())
-            }
-            className="neo-brutalism-input"
-          />
-          <p className="text-xs text-gray-600 mt-1">
-            Current: Segment {newStartSegment + 1}
-          </p>
-        </div>
-
-        <div>
-          <Label htmlFor="end-segment" className="text-sm font-bold mb-2 block">
-            End Segment (1-based)
-          </Label>
-          <Input
-            id="end-segment"
-            type="number"
-            min="1"
-            max={totalSegments}
-            value={newEndSegment + 1}
-            onChange={(e) =>
-              handleEndChange((parseInt(e.target.value, 10) - 1).toString())
-            }
-            className="neo-brutalism-input"
-          />
-          <p className="text-xs text-gray-600 mt-1">
-            Current: Segment {newEndSegment + 1}
-          </p>
-        </div>
-      </div>
-
-      {errors.length > 0 && (
-        <div className="border-2 border-red-500 bg-red-50 p-3 mb-4">
-          <h5 className="font-bold text-red-700 mb-2">Validation Errors:</h5>
-          <ul className="text-red-600 text-sm list-disc list-inside">
-            {errors.map((error, index) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="bg-gray-100 border-2 border-gray-400 p-3 mb-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="font-bold">Original Range:</span>
-            <br />
-            Segments {startSegment + 1} to {endSegment + 1}
-            <br />
-            <span className="text-gray-600">
-              ({endSegment - startSegment + 1} segments)
-            </span>
+          <Label className="text-sm font-bold mb-2 block">Start Segment</Label>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleStartChange(tempStartSegment - 1)}
+              disabled={tempStartSegment <= 0}
+              className="p-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex-1 text-center">
+              <div className="font-mono text-lg font-bold">
+                Segment {tempStartSegment + 1}
+              </div>
+              <div className="text-xs text-gray-600">
+                {startInfo.start} ({startInfo.duration}s)
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleStartChange(tempStartSegment + 1)}
+              disabled={tempStartSegment >= segments.length - 1}
+              className="p-2"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          <div>
-            <span className="font-bold">New Range:</span>
-            <br />
-            Segments {newStartSegment + 1} to {newEndSegment + 1}
-            <br />
-            <span className="text-gray-600">
-              ({newEndSegment - newStartSegment + 1} segments)
-            </span>
+        </div>
+
+        {/* End Segment Selector */}
+        <div>
+          <Label className="text-sm font-bold mb-2 block">End Segment</Label>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleEndChange(tempEndSegment - 1)}
+              disabled={tempEndSegment <= tempStartSegment}
+              className="p-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex-1 text-center">
+              <div className="font-mono text-lg font-bold">
+                Segment {tempEndSegment + 1}
+              </div>
+              <div className="text-xs text-gray-600">
+                {endInfo.end} ({endInfo.duration}s)
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleEndChange(tempEndSegment + 1)}
+              disabled={tempEndSegment >= segments.length - 1}
+              className="p-2"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-2 justify-end">
+      {/* Summary */}
+      <div className="bg-white p-3 rounded border border-orange-200 mb-4">
+        <div className="text-sm">
+          <strong>Selected Range:</strong> Segments {tempStartSegment + 1} to{" "}
+          {tempEndSegment + 1}
+        </div>
+        <div className="text-sm text-gray-600">
+          <strong>Time Range:</strong> {startInfo.start} → {endInfo.end}
+        </div>
+        <div className="text-sm text-gray-600">
+          <strong>Total Segments:</strong>{" "}
+          {tempEndSegment - tempStartSegment + 1}
+        </div>
+      </div>
+
+      {/* Transcription Preview */}
+      <div className="bg-gray-50 p-3 rounded border border-orange-200 mb-4">
+        <div className="text-sm font-bold mb-2 text-gray-700">
+          Transcription Preview:
+        </div>
+        <div className="max-h-40 overflow-y-auto border border-gray-300 bg-white p-3 rounded text-sm">
+          {(() => {
+            const selectedSegments = segments.slice(
+              tempStartSegment,
+              tempEndSegment + 1
+            );
+            const segmentsWithText = selectedSegments.filter(
+              (segment) => segment.text && segment.text.trim().length > 0
+            );
+            const emptySegments =
+              selectedSegments.length - segmentsWithText.length;
+
+            return (
+              <>
+                {selectedSegments.map((segment, index) => (
+                  <span key={tempStartSegment + index} className="block mb-1">
+                    {segment.text && segment.text.trim().length > 0 ? (
+                      <span className="text-gray-800">{segment.text}</span>
+                    ) : (
+                      <span className="text-red-500 italic">
+                        (No text - Segment {tempStartSegment + index + 1})
+                      </span>
+                    )}
+                    {index < tempEndSegment - tempStartSegment && " "}
+                  </span>
+                ))}
+
+                {/* Warning for empty segments */}
+                {emptySegments > 0 && (
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-300 rounded text-xs">
+                    <div className="font-bold text-yellow-800">⚠️ Warning:</div>
+                    <div className="text-yellow-700">
+                      {emptySegments} of {selectedSegments.length} segments have
+                      no transcribed text. This may result in a very short or
+                      empty video clip.
+                    </div>
+                  </div>
+                )}
+
+                {/* Info about content */}
+                {segmentsWithText.length > 0 && (
+                  <div className="mt-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs">
+                    <div className="font-bold text-blue-800">
+                      📝 Content Summary:
+                    </div>
+                    <div className="text-blue-700">
+                      {segmentsWithText.length} segments with text,
+                      approximately {Math.round(segmentsWithText.length * 2)}{" "}
+                      seconds of content.
+                    </div>
+                  </div>
+                )}
+
+                {tempStartSegment === tempEndSegment && (
+                  <div className="text-gray-500 italic mt-2">
+                    Single segment selected
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
         <Button
-          onClick={onCancel}
-          className="neo-brutalism-button bg-gray-400 hover:bg-gray-500 text-white"
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={handleApply}
-          disabled={!isValid || !hasChanges}
-          className="neo-brutalism-button bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => onApply(tempStartSegment, tempEndSegment)}
+          className="neo-brutalism-button bg-green-500 hover:bg-green-600 text-white"
         >
           Apply Changes
+        </Button>
+        <Button
+          onClick={onCancel}
+          variant="outline"
+          className="neo-brutalism-button"
+        >
+          Cancel
         </Button>
       </div>
     </div>

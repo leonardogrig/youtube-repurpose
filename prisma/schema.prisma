@@ -27,6 +27,9 @@ model Video {
   // Transcription segments
   transcriptionSegments TranscriptionSegment[]
 
+  // X post threads
+  threads XThread[]
+
   @@map("videos")
 }
 
@@ -44,4 +47,37 @@ model TranscriptionSegment {
   video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@map("transcription_segments")
+}
+
+model XThread {
+  id        String   @id @default(cuid())
+  videoId   String
+  title     String // Thread title/description
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation to video
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // X posts in this thread
+  posts XPost[]
+
+  @@map("x_threads")
+}
+
+model XPost {
+  id           String   @id @default(cuid())
+  threadId     String
+  title        String
+  postContent  String   @db.Text
+  startSegment Int
+  endSegment   Int
+  keyPoints    String[] // Array of key points
+  orderIndex   Int // Order within the thread
+  createdAt    DateTime @default(now())
+
+  // Relation to thread
+  thread XThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("x_posts")
 }

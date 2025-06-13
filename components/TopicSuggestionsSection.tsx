@@ -4,15 +4,13 @@ import { generateVideoClip } from "@/app/services/videoService";
 import { SegmentRangeEditor } from "@/components/SegmentRangeEditor";
 import { Button } from "@/components/ui/button";
 import { Copy, Download, Edit, Loader2, Play } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SpeechSegment } from "./types";
 
 interface TwitterPost {
-  title: string;
   post_content: string;
-  start_segment: number;
-  end_segment: number;
-  key_points: string[];
+  start_time: number;
+  end_time: number;
 }
 
 interface TopicSuggestionsSectionProps {
@@ -22,6 +20,7 @@ interface TopicSuggestionsSectionProps {
   isGeneratingTwitterPosts?: boolean;
   twitterPosts?: TwitterPost[];
   twitterPostError?: string | null;
+  threadSaveSuccess?: string | null;
   videoFilePath?: string;
   uploadInfo?: {
     sessionId: string;
@@ -35,6 +34,7 @@ export function TopicSuggestionsSection({
   isGeneratingTwitterPosts = false,
   twitterPosts = [],
   twitterPostError,
+  threadSaveSuccess,
   videoFilePath,
   uploadInfo,
 }: TopicSuggestionsSectionProps) {
@@ -57,18 +57,69 @@ export function TopicSuggestionsSection({
   // New state for segment editing
   const [editingPostIndex, setEditingPostIndex] = useState<number | null>(null);
   const [customSegmentRanges, setCustomSegmentRanges] = useState<
-    Record<number, { start_segment: number; end_segment: number }>
+    Record<number, { start_time: number; end_time: number }>
   >({});
 
-  // Get the effective segment range for a post (custom or original)
-  const getEffectiveSegmentRange = (post: TwitterPost, index: number) => {
+  // Clear clips and related state when new posts are generated
+  useEffect(() => {
+    setVideoClips({});
+    setClipErrors({});
+    setCustomSegmentRanges({});
+    setEditingPostIndex(null);
+    setGeneratingClipFor(null);
+  }, [twitterPosts]);
+
+  // Wrapper function to clear clips before generating new posts
+  const handleGenerateXPosts = () => {
+    // Clear all clip-related state before generating new posts
+    setVideoClips({});
+    setClipErrors({});
+    setCustomSegmentRanges({});
+    setEditingPostIndex(null);
+    setGeneratingClipFor(null);
+
+    // Call the original function
+    onGenerateTwitterPosts?.();
+  };
+
+  // Get the effective time range for a post (custom or original)
+  const getEffectiveTimeRange = (post: TwitterPost, index: number) => {
     const customRange = customSegmentRanges[index];
     return (
       customRange || {
-        start_segment: post.start_segment,
-        end_segment: post.end_segment,
+        start_time: post.start_time,
+        end_time: post.end_time,
       }
     );
+  };
+
+  // Helper function to convert time range to segment indices for UI display
+  const getSegmentIndicesFromTimeRange = (timeRange: {
+    start_time: number;
+    end_time: number;
+  }) => {
+    if (!transcribedSegments) return { start_segment: 0, end_segment: 0 };
+
+    let startSegment = 0;
+    let endSegment = transcribedSegments.length - 1;
+
+    // Find the first segment that starts at or after start_time
+    for (let i = 0; i < transcribedSegments.length; i++) {
+      if (transcribedSegments[i].start >= timeRange.start_time) {
+        startSegment = i;
+        break;
+      }
+    }
+
+    // Find the last segment that ends at or before end_time
+    for (let i = transcribedSegments.length - 1; i >= 0; i--) {
+      if (transcribedSegments[i].end <= timeRange.end_time) {
+        endSegment = i;
+        break;
+      }
+    }
+
+    return { start_segment: startSegment, end_segment: endSegment };
   };
 
   const handleEditSegmentRange = (index: number) => {
@@ -80,9 +131,13 @@ export function TopicSuggestionsSection({
     newStartSegment: number,
     newEndSegment: number
   ) => {
+    // Convert segment indices to time ranges
+    const startTime = transcribedSegments?.[newStartSegment]?.start || 0;
+    const endTime = transcribedSegments?.[newEndSegment]?.end || 0;
+
     setCustomSegmentRanges((prev) => ({
       ...prev,
-      [index]: { start_segment: newStartSegment, end_segment: newEndSegment },
+      [index]: { start_time: startTime, end_time: endTime },
     }));
     setEditingPostIndex(null);
 
@@ -126,10 +181,68 @@ export function TopicSuggestionsSection({
     setClipErrors((prev) => ({ ...prev, [index]: "" }));
 
     try {
-      // Use effective segment range (custom or original)
-      const effectiveRange = getEffectiveSegmentRange(post, index);
-      const startTime = transcribedSegments[effectiveRange.start_segment].start;
-      const endTime = transcribedSegments[effectiveRange.end_segment].end;
+      // Use effective time range (custom or original)
+      const effectiveRange = getEffectiveTimeRange(post, index);
+
+      // Validate time range
+      const startTime = effectiveRange.start_time;
+      const endTime = effectiveRange.end_time;
+      const duration = endTime - startTime;
+
+      if (duration <= 0) {
+        setClipErrors((prev) => ({
+          ...prev,
+          [index]: `Invalid duration: ${duration.toFixed(
+            2
+          )}s. Start: ${startTime.toFixed(2)}s, End: ${endTime.toFixed(2)}s`,
+        }));
+        return;
+      }
+
+      if (duration < 0.5) {
+        setClipErrors((prev) => ({
+          ...prev,
+          [index]: `Duration too short: ${duration.toFixed(
+            2
+          )}s. Minimum duration is 0.5 seconds.`,
+        }));
+        return;
+      }
+
+      // Find segments that overlap with this time range for validation
+      const overlappingSegments = transcribedSegments.filter(
+        (segment) => segment.start < endTime && segment.end > startTime
+      );
+
+      // Check if segments have meaningful content
+      const segmentsWithText = overlappingSegments.filter(
+        (segment) => segment.text && segment.text.trim().length > 0
+      );
+
+      if (segmentsWithText.length === 0) {
+        setClipErrors((prev) => ({
+          ...prev,
+          [index]: `No transcribed content found in time range ${startTime.toFixed(
+            2
+          )}s-${endTime.toFixed(
+            2
+          )}s. This range appears to contain only silence.`,
+        }));
+        return;
+      }
+
+      console.log(
+        `Generating clip for time range ${startTime.toFixed(
+          2
+        )}s-${endTime.toFixed(2)}s:`
+      );
+      console.log(`- Duration: ${duration.toFixed(2)}s`);
+      console.log(
+        `- Overlapping segments with text: ${segmentsWithText.length}/${overlappingSegments.length}`
+      );
+      console.log(
+        `- Sample text: "${segmentsWithText[0]?.text?.substring(0, 100)}..."`
+      );
 
       const result = await generateVideoClip(
         videoFilePath,
@@ -210,17 +323,15 @@ export function TopicSuggestionsSection({
   return (
     <div className="mt-4 p-4 border-2 border-black bg-gray-50">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-sm font-bold">Twitter Thread Suggestions</h3>
+        <h3 className="text-sm font-bold">X Thread Suggestions</h3>
         <div className="flex gap-2">
           <Button
-            onClick={onGenerateTwitterPosts}
+            onClick={handleGenerateXPosts}
             disabled={isGeneratingTwitterPosts}
             className="neo-brutalism-button bg-blue-500 hover:bg-blue-600 text-white"
             size="sm"
           >
-            {isGeneratingTwitterPosts
-              ? "Generating..."
-              : "Generate Twitter Posts"}
+            {isGeneratingTwitterPosts ? "Generating..." : "Generate X Posts"}
           </Button>
           <Button
             onClick={onDiscardTranscription}
@@ -235,23 +346,32 @@ export function TopicSuggestionsSection({
       {twitterPostError && (
         <div className="mb-4 p-4 border-2 border-red-300 bg-red-50 rounded">
           <h4 className="text-sm font-bold text-red-700">
-            Twitter Post Generation Error
+            X Post Generation Error
           </h4>
           <p className="text-red-600 text-sm mt-1">{twitterPostError}</p>
+        </div>
+      )}
+
+      {threadSaveSuccess && (
+        <div className="mb-4 p-4 border-2 border-green-300 bg-green-50 rounded">
+          <h4 className="text-sm font-bold text-green-700">Success</h4>
+          <p className="text-green-600 text-sm mt-1">✓ {threadSaveSuccess}</p>
         </div>
       )}
 
       {twitterPosts.length > 0 && (
         <div className="space-y-6">
           <h4 className="text-sm font-semibold text-gray-700 mb-2">
-            Generated Twitter Threads:
+            Generated X Threads:
           </h4>
           {twitterPosts.map((post, index) => {
-            // Use effective segment range for calculations
-            const effectiveRange = getEffectiveSegmentRange(post, index);
+            // Use effective time range for calculations
+            const effectiveTimeRange = getEffectiveTimeRange(post, index);
+            const segmentIndices =
+              getSegmentIndicesFromTimeRange(effectiveTimeRange);
             const postSegments = transcribedSegments.slice(
-              effectiveRange.start_segment,
-              effectiveRange.end_segment + 1
+              segmentIndices.start_segment,
+              segmentIndices.end_segment + 1
             );
             const duration = formatDuration(postSegments);
             const videoClip = videoClips[index];
@@ -267,7 +387,7 @@ export function TopicSuggestionsSection({
               >
                 <div className="flex justify-between items-start mb-3">
                   <h5 className="font-bold text-gray-900 text-lg">
-                    {post.title}
+                    X Thread {index + 1}
                   </h5>
                   <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium">
                     {duration}
@@ -278,7 +398,7 @@ export function TopicSuggestionsSection({
                 <div className="mb-4 p-3 border border-gray-200 rounded bg-gray-50">
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Twitter Thread ({post.post_content.length} characters)
+                      X Thread ({post.post_content.length} characters)
                     </label>
                     <Button
                       size="sm"
@@ -294,24 +414,12 @@ export function TopicSuggestionsSection({
                   </div>
                 </div>
 
-                {/* Key Points */}
-                <div className="mb-4">
-                  <p className="text-xs font-medium text-gray-500 mb-2">
-                    Key Points:
-                  </p>
-                  <ul className="text-xs text-gray-600 list-disc list-inside">
-                    {post.key_points.map((point, pointIndex) => (
-                      <li key={pointIndex}>{point}</li>
-                    ))}
-                  </ul>
-                </div>
-
                 {/* Segment Range Editing */}
                 {isEditing && (
                   <SegmentRangeEditor
-                    startSegment={effectiveRange.start_segment}
-                    endSegment={effectiveRange.end_segment}
-                    totalSegments={transcribedSegments.length}
+                    startSegment={segmentIndices.start_segment}
+                    endSegment={segmentIndices.end_segment}
+                    segments={transcribedSegments}
                     onApply={(newStart: number, newEnd: number) =>
                       handleApplySegmentRange(index, newStart, newEnd)
                     }
@@ -327,8 +435,8 @@ export function TopicSuggestionsSection({
                     </h6>
                     <div className="flex items-center gap-2">
                       <div className="text-xs text-gray-500">
-                        Segments {effectiveRange.start_segment + 1}-
-                        {effectiveRange.end_segment + 1}
+                        Time: {effectiveTimeRange.start_time.toFixed(1)}s-
+                        {effectiveTimeRange.end_time.toFixed(1)}s
                         {hasCustomRange && (
                           <span className="ml-1 text-orange-600 font-bold">
                             (Modified)
@@ -424,8 +532,8 @@ export function TopicSuggestionsSection({
         !twitterPostError && (
           <div className="text-center py-8 text-gray-500">
             <p className="text-sm">
-              Click "Generate Twitter Posts" to analyze your transcription and
-              get viral Twitter thread suggestions with video clips.
+              Click "Generate X Posts" to analyze your transcription and get
+              viral X thread suggestions with video clips.
             </p>
           </div>
         )}

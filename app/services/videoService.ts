@@ -464,11 +464,9 @@ export async function filterTranscribedSegments(
 
 export async function generateTwitterPosts(segments: SpeechSegment[]): Promise<{
   twitterPosts: Array<{
-    title: string;
     post_content: string;
-    start_segment: number;
-    end_segment: number;
-    key_points: string[];
+    start_time: number;
+    end_time: number;
   }>;
   warning?: string;
   error?: string;
@@ -485,13 +483,13 @@ export async function generateTwitterPosts(segments: SpeechSegment[]): Promise<{
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to generate Twitter posts");
+      throw new Error(errorData.error || "Failed to generate X posts");
     }
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error("Error in Twitter post generation:", error);
+    console.error("Error in X post generation:", error);
     throw error;
   }
 }
@@ -541,7 +539,6 @@ export async function identifyTopics(segments: SpeechSegment[]): Promise<{
     description: string;
     start_segment: number;
     end_segment: number;
-    key_points: string[];
     social_media_appeal: string;
   }>;
   warning?: string;
@@ -553,11 +550,10 @@ export async function identifyTopics(segments: SpeechSegment[]): Promise<{
 
   return {
     topicSuggestions: result.twitterPosts.map((post) => ({
-      title: post.title,
+      title: "Generated Thread", // Default title since removed from API
       description: post.post_content.substring(0, 200) + "...", // Truncate for description
-      start_segment: post.start_segment,
-      end_segment: post.end_segment,
-      key_points: post.key_points,
+      start_segment: Math.floor(post.start_time), // Convert time to approximate segment index
+      end_segment: Math.floor(post.end_time), // Convert time to approximate segment index
       social_media_appeal: "Generated Twitter thread content",
     })),
     warning: result.warning,

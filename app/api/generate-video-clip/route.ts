@@ -84,67 +84,134 @@ export async function POST(request: NextRequest) {
     const outputFileName = `clip_${clipId}.mp4`;
     const outputPath = path.join(outputDir, outputFileName);
 
-    // Parse the input video file path
+    // Parse the input video file path with improved detection
     let inputPath = videoFilePath;
 
-    // Prioritize sessionId-based path for uploaded files
-    if (sessionId) {
-      // Handle uploaded files - they should be in uploads/sessionId/
-      const uploadsDir = path.join(process.cwd(), "uploads", sessionId);
+    console.log(`Original videoFilePath: ${videoFilePath}`);
+    console.log(`SessionId: ${sessionId}`);
 
-      // If the videoFilePath already includes the full path, use the filename
-      let fileName = path.basename(videoFilePath);
+    // Function to check multiple possible video locations
+    const findVideoFile = (fileName: string): string | null => {
+      const possiblePaths = [
+        // Check public/videos directory (most common)
+        path.join(process.cwd(), "public", "videos", fileName),
+        // Check uploads/sessionId directory (for uploaded files)
+        sessionId
+          ? path.join(process.cwd(), "uploads", sessionId, fileName)
+          : null,
+        // Check public directory directly
+        path.join(process.cwd(), "public", fileName),
+        // Check if it's already a full path
+        fileName.includes(path.sep) ? fileName : null,
+      ].filter(Boolean) as string[];
 
-      // If it's a generic file:// URL, extract just the filename
-      if (videoFilePath.startsWith("file://localhost/")) {
-        fileName = decodeURIComponent(videoFilePath.split("/").pop() || "");
-      }
-
-      inputPath = path.join(uploadsDir, fileName);
-
-      console.log(`Trying uploaded file path: ${inputPath}`);
-
-      // Verify the file exists, if not try to find it
-      if (!fs.existsSync(inputPath)) {
-        console.log(
-          `File not found at ${inputPath}, searching in uploads directory...`
-        );
-
-        // Try to find any video file in the session directory
-        try {
-          const files = fs.readdirSync(uploadsDir);
-          const videoFiles = files.filter((file) =>
-            /\.(mp4|avi|mov|mkv|webm|flv)$/i.test(file)
-          );
-
-          if (videoFiles.length > 0) {
-            inputPath = path.join(uploadsDir, videoFiles[0]);
-            console.log(`Found video file: ${inputPath}`);
-          }
-        } catch (err) {
-          console.error(`Error reading uploads directory: ${err}`);
+      for (const possiblePath of possiblePaths) {
+        console.log(`Checking path: ${possiblePath}`);
+        if (fs.existsSync(possiblePath)) {
+          console.log(`Found video at: ${possiblePath}`);
+          return possiblePath;
         }
       }
-    } else if (videoFilePath.startsWith("file://localhost/")) {
-      // Extract the actual file path from the file:// URL
-      const relativePath = decodeURIComponent(
-        videoFilePath.replace("file://localhost/", "")
-      );
 
-      // For local development, look in the public directory
-      inputPath = path.join(process.cwd(), "public", relativePath);
+      return null;
+    };
 
-      console.log(`Trying file:// path: ${inputPath}`);
-    } else {
-      console.log(`Using direct path: ${inputPath}`);
+    // Extract filename from various path formats
+    let fileName = path.basename(videoFilePath);
+
+    // Handle different path formats
+    if (videoFilePath.startsWith("file://localhost/")) {
+      // Extract filename from file:// URL
+      fileName = decodeURIComponent(videoFilePath.split("/").pop() || "");
+      console.log(`Extracted filename from file:// URL: ${fileName}`);
+    } else if (videoFilePath.startsWith("videos/")) {
+      // Handle relative path like "videos/filename.mp4"
+      fileName = path.basename(videoFilePath);
+      console.log(`Extracted filename from relative path: ${fileName}`);
+    } else if (videoFilePath.includes("uploads/")) {
+      // Handle uploads path
+      fileName = path.basename(videoFilePath);
+      console.log(`Extracted filename from uploads path: ${fileName}`);
     }
+
+    // Try to find the video file
+    const foundPath = findVideoFile(fileName);
+
+    if (foundPath) {
+      inputPath = foundPath;
+    } else {
+      // If not found, try to search in public/videos directory for any matching file
+      const videosDir = path.join(process.cwd(), "public", "videos");
+      console.log(`Searching in videos directory: ${videosDir}`);
+
+      try {
+        if (fs.existsSync(videosDir)) {
+          const files = fs.readdirSync(videosDir);
+          console.log(`Files in videos directory: ${files.join(", ")}`);
+
+          // Look for exact match first
+          const exactMatch = files.find((file) => file === fileName);
+          if (exactMatch) {
+            inputPath = path.join(videosDir, exactMatch);
+            console.log(`Found exact match: ${inputPath}`);
+          } else {
+            // Look for any video file that contains the base name (without extension)
+            const baseName = path.parse(fileName).name;
+            const videoFiles = files.filter(
+              (file) =>
+                /\.(mp4|avi|mov|mkv|webm|flv)$/i.test(file) &&
+                file.includes(baseName)
+            );
+
+            if (videoFiles.length > 0) {
+              inputPath = path.join(videosDir, videoFiles[0]);
+              console.log(`Found similar video file: ${inputPath}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error reading videos directory: ${err}`);
+      }
+    }
+
+    console.log(`Final input path: ${inputPath}`);
 
     // Check if input file exists
     if (!fs.existsSync(inputPath)) {
+      // Last resort: search all possible video directories
+      const searchDirs = [
+        path.join(process.cwd(), "public", "videos"),
+        path.join(process.cwd(), "public"),
+        sessionId ? path.join(process.cwd(), "uploads", sessionId) : null,
+      ].filter(Boolean) as string[];
+
+      let foundAlternative = false;
+      let searchResults: string[] = [];
+
+      for (const searchDir of searchDirs) {
+        try {
+          if (fs.existsSync(searchDir)) {
+            const files = fs.readdirSync(searchDir);
+            const videoFiles = files.filter((file) =>
+              /\.(mp4|avi|mov|mkv|webm|flv)$/i.test(file)
+            );
+            searchResults.push(`${searchDir}: [${videoFiles.join(", ")}]`);
+          }
+        } catch (err) {
+          searchResults.push(`${searchDir}: Error reading directory`);
+        }
+      }
+
       return NextResponse.json(
         {
           error: `Input video file not found: ${inputPath}`,
-          details: `Original path: ${videoFilePath}`,
+          details: {
+            originalPath: videoFilePath,
+            searchedPath: inputPath,
+            extractedFileName: fileName,
+            sessionId: sessionId,
+            availableVideos: searchResults,
+          },
         },
         { status: 404 }
       );
