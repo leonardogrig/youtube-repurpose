@@ -170,11 +170,13 @@ FORMATTING RULES:
 - Break long thoughts into multiple short, punchy sentences
 
 PROCESS:
-1. Scan all segments for AI-relevant content
-2. Identify specific time ranges containing target topics
-3. Write posts using ONLY content from selected time ranges
-4. Format with proper line breaks and emojis
-5. Verify post content matches transcription text before finalizing
+1. Scan all segments to identify the speaker/context (CEO, founder, expert, company)
+2. Find the most compelling AI topics mentioned throughout
+3. Create POST 1 as a contextualizing hook about the video itself
+4. Identify specific time ranges for detailed content posts (2-N)
+5. Write content posts using ONLY transcription from selected time ranges
+6. Format all posts with proper line breaks and emojis
+7. Verify content matches transcription text exactly
 
 TIME RANGE SELECTION RULES:
 - Maximum 5 minutes (300 seconds) per post
@@ -190,11 +192,28 @@ CONTENT VERIFICATION:
 - Topics discussed must match transcription content
 
 THREAD STRUCTURE:
-POST 1: Hook with most compelling insight from specific time range
-POSTS 2-N: Sequential narrative using different time ranges (1/, 2/, 3/ format)
+POST 1: HOOK - Context about the video/interview itself with intrigue and setup
+- Identify who is speaking (CEO, founder, expert, etc.)
+- Create urgency ("just revealed", "most important", "breaking")
+- Mention compelling topics from the content ("AGI", "singularity", specific breakthroughs)
+- Tease the thread ("Here are my top X takeaways", "Here's what you need to know")
+- Use engaging language ("mind-blowing", "99% of people don't know", "exclusive insights")
 
-EXAMPLE FORMAT:
-"🚀 AI is dramatically increasing engineering velocity.
+POSTS 2-N: Sequential narrative using different time ranges (1/, 2/, 3/ format)
+- Extract specific insights from the transcription
+- Each numbered post covers one key topic/insight
+
+HOOK EXAMPLE:
+"🚀 Google's CEO just had the most important AI interview of 2025.
+
+He revealed mind-blowing facts about artificial general intelligence that 99% of people wouldn't know...
+
+Including when the singularity actually happens.
+
+Here are my top 8 takeaways:"
+
+CONTENT EXAMPLE:
+"1/ 🤖 AI is dramatically increasing engineering velocity.
 
 While 30% of code now uses AI suggestions, Google's overall engineering productivity jumped 10%.
 
@@ -202,13 +221,20 @@ This frees up engineers for more creative problem-solving and brainstorming.
 
 The result? Coding is becoming more fun than ever."
 
+SPECIAL NOTE FOR POST 1 (HOOK):
+- POST 1 can reference general context from the entire video
+- Should identify the speaker/expert and create intrigue about the content
+- Can mention topics that will be covered without detailed explanations
+- Should set up the numbered thread that follows
+- The time range for POST 1 can span broader sections to capture context
+
 FORBIDDEN:
 - Adding information not in transcription
 - Using hashtags (#)
 - Single-line walls of text without breaks
-- Using time range about Topic A to write about Topic B
+- Using time range about Topic A to write about Topic B (except POST 1 hook)
 - Creating content that "sounds good" but doesn't match transcription
-- Mixing unrelated time ranges
+- Mixing unrelated time ranges in content posts (2-N)
 
 REQUIRED JSON OUTPUT:
 {
